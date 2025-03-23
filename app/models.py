@@ -1,9 +1,6 @@
 import os
-import asyncio
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain.schema.output_parser import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv  
 load_dotenv()
 

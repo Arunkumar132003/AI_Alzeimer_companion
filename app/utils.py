@@ -1,11 +1,14 @@
 import pymongo
+from pymongo import MongoClient
 import random
 import os
+import re
 from PIL import Image
 import io
 import base64
 from dotenv import load_dotenv
 from datetime import datetime
+import streamlit as st
 load_dotenv()
 
 mongodb_uri = os.getenv("MONGODB_URI")
@@ -78,3 +81,39 @@ def get_random_memory():
         if memories_list:
             return random.choice(memories_list)
     return (None, None)
+
+
+@st.cache_data(ttl=3600) 
+def load_all_text_data():
+    people_data = collection.find_one({"table_name": "people"}, {"_id": 0, "people": 1})
+    events_data = collection.find_one({"table_name": "events"}, {"_id": 0, "events": 1})
+    memories_data = collection.find_one({"table_name": "memories"}, {"_id": 0, "memories": 1})
+    
+    documents = []
+    
+    if people_data and people_data.get("people"):
+        for name, data in people_data["people"].items():
+            context = f"PERSON: {name}\nRelation: {data.get('relation', 'N/A')}\nAge: {data.get('age', 'N/A')}\nGender: {data.get('gender', 'N/A')}\nDescription: {data.get('description', 'N/A')}"
+            if "conversations" in data:
+                for date, conv in data["conversations"].items():
+                    if date:  
+                        context += f"\nConversation on {date}: {conv.get('conversation', 'N/A')}"
+            
+            documents.append(context)
+    
+    if events_data and events_data.get("events"):
+        for title, data in events_data["events"].items():
+            context = f"UPCOMING EVENTS: {title}\nDate: {data.get('date', 'N/A')}\nDescription: {data.get('description', 'N/A')}"
+            documents.append(context)
+    
+    if memories_data and memories_data.get("memories"):
+        for title, data in memories_data["memories"].items():
+            context = f"PAST MEMORY: {title}\nDate: {data.get('date', 'N/A')}\nDescription: {data.get('description', 'N/A')}"
+            documents.append(context)
+    
+    return documents
+
+
+def get_people_name():
+    existing_people = collection.find_one({"table_name": "people"})
+    return list(existing_people["people"].keys()) if existing_people and "people" in existing_people else []

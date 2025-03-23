@@ -1,11 +1,26 @@
 import streamlit as st  
 import pymongo
+from datetime import datetime, date
 import os
 import random
-from models import MemoryRecallQuestionandAnswer , MemoryRecallResponseValidation, invoke_model
+from models import MemoryRecallQuestionandAnswer , MemoryRecallResponseValidation, invoke_model, load_model
 from dotenv import load_dotenv
 load_dotenv()
-from utils import encode_image, encode_uploaded_image, get_upcoming_events, get_people, get_datetime, get_random_memory, get_random_people
+
+from utils import (
+    encode_image, 
+    encode_uploaded_image, 
+    get_upcoming_events, 
+    get_people, get_datetime, 
+    get_random_memory, 
+    get_random_people,
+    load_all_text_data,
+    get_people_name
+)
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain.chains import RetrievalQA
+from langchain.prompts import PromptTemplate
 
 mongodb_uri = os.getenv("MONGODB_URI")
 mongodb_database = os.getenv("MONGODB_DATABASE")
@@ -16,8 +31,8 @@ collection = db[collection_name]
 
 st.set_page_config(page_title="AI Alzheimer Companion", page_icon="🧠", layout="wide")
 
-patient_name = "John"
-profile_image_path = "profile.jpeg"     
+patient_name = "Sanjay"
+profile_image_path = "profile.jpg"     
 
 profile_image_base64 = encode_image(profile_image_path)
 st.sidebar.markdown(
@@ -88,6 +103,8 @@ upcoming_events = get_upcoming_events()
 with st.sidebar.expander("Add Person", expanded=False):
     uploaded_file = st.file_uploader("Upload a person's image", type=["jpg", "png", "jpeg"])
     name = st.text_input("Name")
+    age = st.number_input("Age", min_value=0, max_value=120, step=1)
+    gender = st.selectbox("Gender", ["Male", "Female"])
     relation = st.selectbox("Relation", ["Father", "Mother", "Sister", "Brother", "Friend", "Other"])
     description = st.text_area("Description")
 
@@ -95,11 +112,12 @@ with st.sidebar.expander("Add Person", expanded=False):
         if uploaded_file and name and relation and description:
             image_data = encode_uploaded_image(uploaded_file)
             person_entry = {
-                name: {
-                    "image": image_data,
-                    "relation": relation,
-                    "description": description,
-                }
+                "age": age,
+                "gender": gender,
+                "image": image_data,
+                "relation": relation,
+                "description": description,
+                "conversations": {}
             }
 
             existing_people = collection.find_one({"table_name": "people"})
@@ -107,17 +125,40 @@ with st.sidebar.expander("Add Person", expanded=False):
             if existing_people:
                 collection.update_one(
                     {"table_name": "people"},
-                    {"$set": {f"people.{name}": person_entry[name]}}
+                    {"$set": {f"people.{name}": person_entry}}
                 )
             else:
                 collection.insert_one({
                     "table_name": "people",
-                    "people": person_entry
+                    "people": {name: person_entry}
                 })
 
             st.success("Added to your memory successfully! Every moment matters and is now part of your cherished memories 🧠.")
         else:
             st.error("Please fill in all details and upload an image.")
+
+with st.sidebar.expander("Add Conversation", expanded=False):
+    existing_person= get_people_name()
+    person_name = st.selectbox("Name", existing_person)
+    conversation_date = st.date_input("Conversation Date", date.today())
+    conversation_text = st.text_area("Conversation")
+
+    if st.button("Add Conversation"):
+        if person_name and conversation_text:
+            conversation_entry = {
+                "conversation": conversation_text
+            }
+            date_str = conversation_date.strftime("%Y-%m-%d")
+            update_result = collection.update_one(
+                {"table_name": "people", f"people.{person_name}": {"$exists": True}},
+                {"$set": {f"people.{person_name}.conversations.{date_str}": conversation_entry}}
+            )
+            if update_result.modified_count > 0:
+                st.success(f"Conversation added for {person_name} on {date_str}.")
+            else:
+                st.error(f"Person named {person_name} not found.")
+        else:
+            st.error("Please provide the person's name and the conversation text.")
 
 
 # ========== Add Memory Section ==========
@@ -184,6 +225,8 @@ with st.sidebar.expander("Add Upcoming Event", expanded=False):
         else:
             st.error("Please fill in all details to add an event.")
 
+if st.sidebar.button("💬 Chat", use_container_width=True):
+    st.switch_page("chat")
 
 # ==========  Header Section  ==========
 marquee_messages = [
@@ -191,7 +234,7 @@ marquee_messages = [
     f"📅 Today is {get_datetime()}",
     "📌 Reminder: Doctor’s appointment on March 18, 2025, at 3 PM.",
     "💊 Take your heart medication at 2:00 PM.",
-    "🎉 Mike's birthday is on March 20! Don't forget to wish him!",
+    "🎉 Mike's birthday is on March 22! Don't forget to wish him!",
     "☀ Today's Weather: Sunny, 25°C. A great day for a walk!"
 ]
 marquee_content = " " * 50 + " | " + " " * 50  
@@ -314,7 +357,7 @@ with left_col:
                     transition: transform 0.3s;
                 ">
                     <h3 style="color: #4CAF50; margin-bottom: 20px;">
-                       Do you remember this event: {memory_title}?
+                       Do you remember: {memory_title}?
                     </h3>
                 </div>
             """, unsafe_allow_html=True)
