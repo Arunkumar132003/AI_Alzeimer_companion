@@ -48,7 +48,6 @@ def get_upcoming_events():
     return []
 
 
-
 def get_people(n=8):
     people_data = collection.find_one({"table_name": "people"})
     if people_data and "people" in people_data:
@@ -85,12 +84,19 @@ def get_random_memory():
 
 @st.cache_data(ttl=3600) 
 def load_all_text_data():
+    user_data = collection.find_one({"table_name": "users"}, {"_id": 0, "users": 1})
     people_data = collection.find_one({"table_name": "people"}, {"_id": 0, "people": 1})
     events_data = collection.find_one({"table_name": "events"}, {"_id": 0, "events": 1})
     memories_data = collection.find_one({"table_name": "memories"}, {"_id": 0, "memories": 1})
     
     documents = []
-    
+
+    if user_data and user_data.get("users"):
+        for username, data in user_data["users"].items():
+            context = f"USER DETAILS:\nFull Name: {data.get('Full Name', 'N/A')}\nDate of Birth: {data.get('Date of Birth', 'N/A')}\nGender: {data.get('Gender', 'N/A')}\nEmail: {data.get('Email', 'N/A')}\nPhone: {data.get('Phone', 'N/A')}\nAddress: {data.get('Address', 'N/A')}\nDiagnosis Date: {data.get('Diagnosis Date', 'N/A')}\nMedications: {data.get('Medications', 'N/A')}\nMedical History: {data.get('Medical History', 'N/A')}\nKnown Allergies: {data.get('Known Allergies', 'N/A')}\nCognitive Assessment: {data.get('Cognitive Assessment', 'N/A')}\nEmergency Contact: {data.get('Emergency Contact', 'N/A')} ({data.get('Emergency Contact Phone', 'N/A')})\nPreferred Language: {data.get('Preferred Language', 'N/A')}\nHobbies: {data.get('Hobbies', 'N/A')}"
+            
+            documents.append(context)
+
     if people_data and people_data.get("people"):
         for name, data in people_data["people"].items():
             context = f"PERSON: {name}\nRelation: {data.get('relation', 'N/A')}\nAge: {data.get('age', 'N/A')}\nGender: {data.get('gender', 'N/A')}\nDescription: {data.get('description', 'N/A')}"
@@ -100,19 +106,18 @@ def load_all_text_data():
                         context += f"\nConversation on {date}: {conv.get('conversation', 'N/A')}"
             
             documents.append(context)
-    
+
     if events_data and events_data.get("events"):
         for title, data in events_data["events"].items():
-            context = f"UPCOMING EVENTS: {title}\nDate: {data.get('date', 'N/A')}\nDescription: {data.get('description', 'N/A')}"
+            context = f"UPCOMING EVENT: {title}\nDate: {data.get('date', 'N/A')}\nDescription: {data.get('description', 'N/A')}"
             documents.append(context)
-    
+
     if memories_data and memories_data.get("memories"):
         for title, data in memories_data["memories"].items():
             context = f"PAST MEMORY: {title}\nDate: {data.get('date', 'N/A')}\nDescription: {data.get('description', 'N/A')}"
             documents.append(context)
-    
-    return documents
 
+    return documents
 
 def get_people_name():
     existing_people = collection.find_one({"table_name": "people"})
