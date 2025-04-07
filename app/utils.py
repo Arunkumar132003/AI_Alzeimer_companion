@@ -6,11 +6,22 @@ import re
 from PIL import Image
 import io
 import base64
+from twilio.rest import Client
 from dotenv import load_dotenv
 from datetime import datetime
-import streamlit as st
 load_dotenv()
+import schedule
+import time
+import threading
+import streamlit as st
+import imaplib
+import email
+from email.header import decode_header
 
+
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 mongodb_uri = os.getenv("MONGODB_URI")
 mongodb_database = os.getenv("MONGODB_DATABASE")
 collection_name = "companion"
@@ -119,6 +130,96 @@ def load_all_text_data():
 
     return documents
 
+def send_sms(phone_number, message):
+    twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    twilio_client.messages.create(
+        body=message,
+        from_=TWILIO_PHONE_NUMBER,
+        to=phone_number
+    )
+
 def get_people_name():
     existing_people = collection.find_one({"table_name": "people"})
     return list(existing_people["people"].keys()) if existing_people and "people" in existing_people else []
+
+def check_reminders():
+    now = datetime.now().strftime("%I:%M %p")
+    reminders = collection.find({})
+
+    for reminder in reminders:
+        for medicine, times in reminder.get("medications", {}).items():
+            formatted_times = []
+            for t in times:
+                try:
+                    formatted_time = datetime.strptime(t, "%I:%M:%S %p").strftime("%I:%M %p")
+                except ValueError:
+                    formatted_time = datetime.strptime(t, "%I:%M %p").strftime("%I:%M %p")
+                formatted_times.append(formatted_time)
+
+            if now in formatted_times:
+                last_sent = reminder.get("last_sent", {})
+                if last_sent.get(medicine) == now:
+                    continue
+                message = f"Reminder: Take your medication '{medicine}'"
+                send_sms(reminder['phone_number'], message)
+                st.success(f"Reminder sent to {reminder['phone_number']}")
+                last_sent[medicine] = now
+                collection.update_one({"_id": reminder["_id"]}, {"$set": {"last_sent": last_sent}})
+
+def schedule_checker():
+    while True:
+        schedule.run_pending()
+        time.sleep(30)
+
+
+def fetch_primary_emails(username, app_password, num_messages=5):
+    emails = []
+    try:
+        mail = imaplib.IMAP4_SSL("imap.gmail.com")
+        mail.login(username, app_password)
+        mail.select("inbox")
+        status, messages = mail.search(None, 'X-GM-RAW "category:primary"')
+        email_ids = messages[0].split()
+
+        if not email_ids:
+            return emails
+
+        latest_ids = email_ids[-num_messages:]
+
+        for num in reversed(latest_ids):
+            res, msg = mail.fetch(num, "(RFC822)")
+            for response in msg:
+                if isinstance(response, tuple):
+                    msg = email.message_from_bytes(response[1])
+                    subject = decode_header(msg["Subject"])[0][0]
+                    if isinstance(subject, bytes):
+                        subject = subject.decode()
+                    from_ = msg.get("From")
+                    body = ""
+                    if msg.is_multipart():
+                        for part in msg.walk():
+                            content_type = part.get_content_type()
+                            content_dispo = str(part.get("Content-Disposition"))
+                            if content_type == "text/plain" and "attachment" not in content_dispo:
+                                body_bytes = part.get_payload(decode=True)
+                                if body_bytes:
+                                    body = body_bytes.decode(errors="ignore")
+                                    break
+                    else:
+                        content_type = msg.get_content_type()
+                        if content_type == "text/plain":
+                            body_bytes = msg.get_payload(decode=True)
+                            if body_bytes:
+                                body = body_bytes.decode(errors="ignore")
+
+                    emails.append({"from": from_, "subject": subject, "body": body})
+
+        mail.logout()
+    except imaplib.IMAP4.error as e:
+        st.error(f"IMAP error: {e}")
+    except Exception as ex:
+        st.error(f"An error occurred: {ex}")
+    return emails
+
+def sanitize_identifier(identifier):
+    return re.sub(r'[^a-zA-Z0-9_-]', '_', identifier)

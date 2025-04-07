@@ -1,27 +1,43 @@
-import streamlit as st  
+import streamlit as st
 import pymongo
 from datetime import datetime, date
 import os
 import random
-from models import MemoryRecallQuestionandAnswer , MemoryRecallResponseValidation, invoke_model, load_model
+from models import (
+    MemoryRecallQuestionandAnswer,
+    MemoryRecallResponseValidation,
+    invoke_model,
+    load_model,
+)
 from dotenv import load_dotenv
-load_dotenv()
 
+load_dotenv()
+import schedule
+import threading
 from utils import (
-    encode_image, 
-    encode_uploaded_image, 
-    get_upcoming_events, 
-    get_people, get_datetime, 
-    get_random_memory, 
+    encode_image,
+    encode_uploaded_image,
+    get_upcoming_events,
+    get_people,
+    get_datetime,
+    get_random_memory,
     get_random_people,
-    load_all_text_data,
-    get_people_name
+    fetch_primary_emails,
+    get_people_name,
+    schedule_checker,
+    check_reminders,
+    sanitize_identifier
 )
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain.schema import Document
+from langchain.chains.summarize import load_summarize_chain
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 
+os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY")
+
+st.set_page_config(page_title="AI Alzheimer Companion", page_icon="🧠", layout="wide")
 mongodb_uri = os.getenv("MONGODB_URI")
 mongodb_database = os.getenv("MONGODB_DATABASE")
 collection_name = "companion"
@@ -29,10 +45,10 @@ client = pymongo.MongoClient(mongodb_uri)
 db = client[mongodb_database]
 collection = db[collection_name]
 
-st.set_page_config(page_title="AI Alzheimer Companion", page_icon="🧠", layout="wide")
-
+schedule.every().minute.do(check_reminders)
+threading.Thread(target=schedule_checker, daemon=True).start()
 patient_name = "Sanjay"
-profile_image_path = "profile.jpg"     
+profile_image_path = "profile.jpg"
 
 profile_image_base64 = encode_image(profile_image_path)
 st.sidebar.markdown(
@@ -67,7 +83,7 @@ st.sidebar.markdown(
     </div>
     <hr>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 st.markdown(
@@ -97,15 +113,17 @@ st.markdown(
 
 upcoming_events = get_upcoming_events()
 
-
-
 # ========== Add Person Section ==========
 with st.sidebar.expander("Add Person", expanded=False):
-    uploaded_file = st.file_uploader("Upload a person's image", type=["jpg", "png", "jpeg"])
+    uploaded_file = st.file_uploader(
+        "Upload a person's image", type=["jpg", "png", "jpeg"]
+    )
     name = st.text_input("Name")
     age = st.number_input("Age", min_value=0, max_value=120, step=1)
     gender = st.selectbox("Gender", ["Male", "Female"])
-    relation = st.selectbox("Relation", ["Father", "Mother", "Sister", "Brother", "Friend", "Other"])
+    relation = st.selectbox(
+        "Relation", ["Father", "Mother", "Sister", "Brother", "Friend", "Other"]
+    )
     description = st.text_area("Description")
 
     if st.button("Add Person"):
@@ -117,41 +135,43 @@ with st.sidebar.expander("Add Person", expanded=False):
                 "image": image_data,
                 "relation": relation,
                 "description": description,
-                "conversations": {}
+                "conversations": {},
             }
 
             existing_people = collection.find_one({"table_name": "people"})
 
             if existing_people:
                 collection.update_one(
-                    {"table_name": "people"},
-                    {"$set": {f"people.{name}": person_entry}}
+                    {"table_name": "people"}, {"$set": {f"people.{name}": person_entry}}
                 )
             else:
-                collection.insert_one({
-                    "table_name": "people",
-                    "people": {name: person_entry}
-                })
+                collection.insert_one(
+                    {"table_name": "people", "people": {name: person_entry}}
+                )
 
-            st.success("Added to your memory successfully! Every moment matters and is now part of your cherished memories 🧠.")
+            st.success(
+                "Added to your memory successfully! Every moment matters and is now part of your cherished memories 🧠."
+            )
         else:
             st.error("Please fill in all details and upload an image.")
 
 with st.sidebar.expander("Add Conversation", expanded=False):
-    existing_person= get_people_name()
+    existing_person = get_people_name()
     person_name = st.selectbox("Name", existing_person)
     conversation_date = st.date_input("Conversation Date", date.today())
     conversation_text = st.text_area("Conversation")
 
     if st.button("Add Conversation"):
         if person_name and conversation_text:
-            conversation_entry = {
-                "conversation": conversation_text
-            }
+            conversation_entry = {"conversation": conversation_text}
             date_str = conversation_date.strftime("%Y-%m-%d")
             update_result = collection.update_one(
                 {"table_name": "people", f"people.{person_name}": {"$exists": True}},
-                {"$set": {f"people.{person_name}.conversations.{date_str}": conversation_entry}}
+                {
+                    "$set": {
+                        f"people.{person_name}.conversations.{date_str}": conversation_entry
+                    }
+                },
             )
             if update_result.modified_count > 0:
                 st.success(f"Conversation added for {person_name} on {date_str}.")
@@ -170,9 +190,7 @@ with st.sidebar.expander("Add Memory", expanded=False):
 
     if st.button("Add Memory"):
         if memory_title and memory_description:
-            memory_entry = {
-                "description": memory_description
-            }
+            memory_entry = {"description": memory_description}
 
             if add_date and memory_date:
                 memory_entry["date"] = str(memory_date)
@@ -182,13 +200,12 @@ with st.sidebar.expander("Add Memory", expanded=False):
             if existing_memories:
                 collection.update_one(
                     {"table_name": "memories"},
-                    {"$set": {f"memories.{memory_title}": memory_entry}}
+                    {"$set": {f"memories.{memory_title}": memory_entry}},
                 )
             else:
-                collection.insert_one({
-                    "table_name": "memories",
-                    "memories": {memory_title: memory_entry}
-                })
+                collection.insert_one(
+                    {"table_name": "memories", "memories": {memory_title: memory_entry}}
+                )
 
             st.success(f"Memory '{memory_title}' added successfully! 💙")
         else:
@@ -203,41 +220,30 @@ with st.sidebar.expander("Add Upcoming Event", expanded=False):
 
     if st.button("Add Event"):
         if event_title and event_date and event_description:
-            event_entry = {
-                "description": event_description,
-                "date": str(event_date)  
-            }
+            event_entry = {"description": event_description, "date": str(event_date)}
 
             existing_events = collection.find_one({"table_name": "events"})
 
             if existing_events:
                 collection.update_one(
                     {"table_name": "events"},
-                    {"$set": {f"events.{event_title}": event_entry}}
+                    {"$set": {f"events.{event_title}": event_entry}},
                 )
             else:
-                collection.insert_one({
-                    "table_name": "events",
-                    "events": {event_title: event_entry}
-                })
+                collection.insert_one(
+                    {"table_name": "events", "events": {event_title: event_entry}}
+                )
 
             st.success(f"Event '{event_title}' added successfully! 📅")
         else:
             st.error("Please fill in all details to add an event.")
 
-if st.sidebar.button("💬 Chat", use_container_width=True):
-    st.switch_page("chat")
-
 # ==========  Header Section  ==========
 marquee_messages = [
     f"Hello {patient_name}! Hope you're having a wonderful day! 😊",
     f"📅 Today is {get_datetime()}",
-    "📌 Reminder: Doctor’s appointment on March 18, 2025, at 3 PM.",
-    "💊 Take your heart medication at 2:00 PM.",
-    "🎉 Mike's birthday is on March 22! Don't forget to wish him!",
-    "☀ Today's Weather: Sunny, 25°C. A great day for a walk!"
 ]
-marquee_content = " " * 50 + " | " + " " * 50  
+marquee_content = " " * 50 + " | " + " " * 50
 marquee_content = marquee_content.join(marquee_messages)
 marquee_style = """
     <style>
@@ -273,7 +279,7 @@ st.markdown(
         <div class="marquee-text">{marquee_content}</div>
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 if "activity" not in st.session_state:
@@ -287,7 +293,8 @@ left_col, middle_col, right_col = st.columns([1, 1, 1])
 
 # ========== 🧠 Memory Recall Section ==========
 with left_col:
-    st.markdown("""
+    st.markdown(
+        """
         <div style="
             background: linear-gradient(145deg, #ffffff, #f0f0f0);
             padding: 20px;
@@ -301,14 +308,17 @@ with left_col:
         ">
             <h2 style="background-color: #1f77b4; font-size: 24px; margin-bottom: 15px; font-weight: 600; border: 2px solid #1f77b4; border-radius: 8px; color: white; height: 45px; padding: 5px;">Memory Recall</h2>
         </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     if st.session_state.activity == 1:
         # ====== 🔹 Activity 1: Recognizing a Person ======
         person_name, person_info = get_random_people()
         if person_name and person_info:
             image_data = person_info["image"]
-            st.markdown(f"""
+            st.markdown(
+                f"""
                 <div style="
                     background: white;
                     padding: 25px;
@@ -331,23 +341,32 @@ with left_col:
                         margin-bottom: 20px;
                     ">
                 </div>
-            """, unsafe_allow_html=True)
-            
+            """,
+                unsafe_allow_html=True,
+            )
+
             with st.form("person_form", clear_on_submit=True):
-                user_input = st.text_input("Enter their name:", placeholder="Type the name here...")
+                user_input = st.text_input(
+                    "Enter their name:", placeholder="Type the name here..."
+                )
                 submitted = st.form_submit_button("Check Answer ➡️")
-                
+
                 if submitted:
                     if user_input.strip().lower() == person_name.strip().lower():
-                        st.success(f"✅ Correct! This is {person_name}, your {person_info['relation']}")
+                        st.success(
+                            f"✅ Correct! This is {person_name}, your {person_info['relation']}"
+                        )
                     else:
-                        st.error(f"This is {person_name}, your ({person_info['relation']})")
+                        st.error(
+                            f"This is {person_name}, your ({person_info['relation']})"
+                        )
 
     elif st.session_state.activity == 2:
-    # ====== 📖 Activity 2: Recalling a Memory ======
+        # ====== 📖 Activity 2: Recalling a Memory ======
         memory_title, memory_info = get_random_memory()
         if memory_title and memory_info:
-            st.markdown(f"""
+            st.markdown(
+                f"""
                 <div style="
                     background: white;
                     padding: 25px;
@@ -360,10 +379,14 @@ with left_col:
                        Do you remember: {memory_title}?
                     </h3>
                 </div>
-            """, unsafe_allow_html=True)
-            
+            """,
+                unsafe_allow_html=True,
+            )
+
             with st.form("memory_form", clear_on_submit=True):
-                user_input = st.text_area("Share your thoughts:", placeholder="Write your memories here...")
+                user_input = st.text_area(
+                    "Share your thoughts:", placeholder="Write your memories here..."
+                )
                 submitted = st.form_submit_button("Submit Memory 📝")
 
                 if submitted:
@@ -383,19 +406,22 @@ with left_col:
 
                     Determine if the user's response is correct, considering Alzheimer's-related recall difficulties.
                     """
-                    response = invoke_model(validation_prompt, MemoryRecallResponseValidation)
+                    response = invoke_model(
+                        validation_prompt, MemoryRecallResponseValidation
+                    )
 
                     if response.is_correct:
                         st.success("✅ Great job! Keep rocking. 🎉")
                     else:
-                        st.warning(f"That's an interesting perspective! Here's a hint to help you recall: \n\n **{memory_info['description']}** 😊")
-
+                        st.warning(
+                            f"That's an interesting perspective! Here's a hint to help you recall: \n\n **{memory_info['description']}** 😊"
+                        )
 
     elif st.session_state.activity == 3:
         # ======  Activity 3: Answering a General Question ======
-        prompt= ""
+        prompt = ""
         if not st.session_state.question:
-            qna_prompt= "You are a compassionate cognitive assistant helping Alzheimer's patients with memory recall. Generate simple, clear questions designed to gently stimulate memory without causing frustration. AVOID asking general knowledge or historical facts and questions that require memorization, such as names, dates, places, or specific past events. Ensure each question is easy to understand and answer. Provide a precise, concise answer that aligns with everyday life scenarios"
+            qna_prompt = "​You are a compassionate cognitive assistant dedicated to aiding individuals with Alzheimer's in memory recall. Your task is to generate simple, clear questions that gently stimulate memory without causing frustration. Each question must be designed to elicit a precise, one-word answer. Avoid questions that require memorization of names, dates, places, specific past events, general knowledge, or historical facts. Ensure that each question is easy to understand and answer, aligning with everyday life scenarios."
             response = invoke_model(qna_prompt, MemoryRecallQuestionandAnswer)
             st.session_state.question = response.question
             st.session_state.answer = response.answer
@@ -403,7 +429,8 @@ with left_col:
         question = st.session_state.question
         answer = st.session_state.answer
 
-        st.markdown(f"""
+        st.markdown(
+            f"""
             <div style="
                 background: white;
                 padding: 25px;
@@ -421,12 +448,16 @@ with left_col:
                     {question}
                 </p>
             </div>
-        """, unsafe_allow_html=True)
-        
+        """,
+            unsafe_allow_html=True,
+        )
+
         with st.form("general_form", clear_on_submit=True):
-            user_input = st.text_input("Your answer:", placeholder="Type your answer here...")
+            user_input = st.text_input(
+                "Your answer:", placeholder="Type your answer here..."
+            )
             submitted = st.form_submit_button("Submit")
-            
+
             if submitted:
                 validation_prompt = f"""
                 You are a compassionate cognitive assistant designed to validate memory recall responses for Alzheimer's patients.  
@@ -446,7 +477,9 @@ with left_col:
 
                 Assess whether the user's response aligns with the expected answer while maintaining a gentle and supportive approach.
                 """
-                response = invoke_model(validation_prompt, MemoryRecallResponseValidation)
+                response = invoke_model(
+                    validation_prompt, MemoryRecallResponseValidation
+                )
 
                 if response.is_correct:
                     st.balloons()
@@ -460,9 +493,99 @@ with left_col:
             st.session_state.activity = random.choice([1, 2, 3])
 
 
+# =========== Mail Summary Section ============
+with middle_col:
+    with st.container():
+        st.markdown(
+        """
+        <div style="
+            background: linear-gradient(145deg, #ffffff, #f0f0f0);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 6px 6px 12px rgba(0,0,0,0.1), -6px -6px 12px rgba(255,255,255,0.7);
+            text-align: center;
+            margin-top: 30px; 
+            margin-bottom: 20px;
+            height: 90px;
+            border: 2px solid #e0e0e0; 
+        ">
+            <h2 style="background-color: #1f77b4; font-size: 24px; margin-bottom: 15px; font-weight: 600; border: 2px solid #1f77b4; border-radius: 8px; color: white; height: 45px; padding: 5px;">Email Highlights</h2>
+        </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+        emails = fetch_primary_emails("", "", num_messages=7)
+
+        if not emails:
+            st.info("No primary emails found.")
+        else:
+            documents = [email_data['body'] for email_data in emails if email_data['body']]
+
+            if documents:
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+                vectorstore = FAISS.from_texts(texts=documents, embedding=embeddings)
+                retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+
+                llm = load_model()
+                if llm is None:
+                    st.error("Failed to load the language model.")
+                    st.stop()
+
+                prompt_template = """
+                You are MemoMate, a gentle memory assistant helping users summarize and remember key information from emails.
+
+                ### Instructions:
+                - AVOID if any promotional messages, spam, or irrelevant content.
+                - Use the context to generate a friendly and helpful summary only highlighting main elements AVOID mentioning all things.
+                - Focus on important parts like names, dates, events, tasks, or anything that might be a helpful memory cue.
+                - Keep it short and conversational.
+                - If the body is too long or unclear, highlight what seems most relevant.
+
+                ### Context:
+                {text}
+
+                ### Response:
+                """
+
+                PROMPT = PromptTemplate(template=prompt_template, input_variables=["text"])
+
+                summarize_chain = load_summarize_chain(
+                    llm=llm,
+                    chain_type="map_reduce",
+                    map_prompt=PROMPT,
+                    combine_prompt=PROMPT
+                )
+
+                from langchain.schema import Document
+                email_docs = [Document(page_content=body) for body in documents]
+
+                with st.spinner("Generating consolidated email summary..."):
+                    summary_output = summarize_chain.run(email_docs)
+                    consolidated_summary = summary_output.strip() if summary_output else "No summary available."
+
+                st.markdown(f"""
+                    <div style="
+                        background-color: #f9f9f9; 
+                        border-radius: 10px; 
+                        padding: 15px; 
+                        margin-bottom: 10px; 
+                        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+                    ">
+                        <div style="
+                            font-size: 14px; 
+                            color: #555; 
+                            margin-top: 10px;
+                        "><strong>MemoMate Consolidated Summary:</strong> {consolidated_summary}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No email bodies available for processing.")
+
 # ========== Upcoming Events Section ==========
 with right_col:
-    st.markdown("""
+    st.markdown(
+        """
         <div style="
             background: linear-gradient(145deg, #ffffff, #f0f0f0);
             padding: 20px;
@@ -476,13 +599,16 @@ with right_col:
         ">
             <h2 style="background-color: #1f77b4; font-size: 24px; margin-bottom: 15px; font-weight: 600; border: 2px solid #1f77b4; border-radius: 8px; color: white; height: 45px; padding: 5px;">Upcoming Events</h2>
         </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     upcoming_events = get_upcoming_events()
-    
+
     if upcoming_events:
         for title, event_date in upcoming_events:
-            st.markdown(f"""
+            st.markdown(
+                f"""
                 <div style="
                     background: white;
                     padding: 15px;
@@ -499,41 +625,86 @@ with right_col:
                     <h4 style="color: #333; margin-bottom: 8px; font-size: 18px; font-weight: 600;">{title}</h4>
                     <p style="color: #777; font-size: 14px; margin: 0; font-weight: 400;"><i class="fa fa-calendar"></i> {event_date}</p>
                 </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
     else:
         st.info("No upcoming events.")
 
 # ========== People & Friends Section ==========
-st.markdown("<h2 style='text-align: left; color: #1f77b4; font-size: 27px;'>People & Friends</h2>", unsafe_allow_html=True)
+st.markdown(
+    "<h2 style='text-align: left; color: #1f77b4; font-size: 27px;'>People & Friends</h2>",
+    unsafe_allow_html=True,
+)
 random_people = get_people()
 if random_people:
-    col_count = 4 
-    row_count = 2 
+    col_count = 4
+    row_count = 2
     total_slots = col_count * row_count
     random_people = random_people[:total_slots]
-    cols = st.columns(col_count)  
+    cols = st.columns(col_count)
     for idx, (name, person) in enumerate(random_people):
-        with cols[idx % col_count]:  
+        with cols[idx % col_count]:
             st.markdown(
                 f"""
                 <div style="
                     background-color: #f9f9f9;
-                    padding: 14px;
+                    padding: 16px;
                     border-radius: 10px;
                     box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
                     text-align: center;
-                    width: 300px;
-                    height: 200px;
-                    margin: auto;
-                    margin-top: 20px;
+                    width: 100%;
+                    height: 220px;
+                    margin: 10px;
+                    margin-bottom: 40px;
                 ">
                     <img src="data:image/png;base64,{person['image']}" 
-                    style="width:100px; height:100px; border-radius:50%; border: 3px solid #4CAF50;">
-                    <h4 style="color:#1f77b4; margin:4px 0 2px; font-size:16px;">{name}</h4>
-                    <p style="color:#444; font-size:14px; margin:0;">{person['relation']}</p>   
+                    style="width:100px; height:100px; border-radius:50%; border: 3px solid #4CAF50; margin-bottom: 10px;">
+                    <h4 style="color:#1f77b4; margin:4px 0 2px; font-size:16px; text-align: center;">{name}</h4>
+                    <p style="color:#444; font-size:14px; margin:0; text-align: center;">{person['relation']}</p>   
                 </div>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
 else:
     st.info("No people found. Start adding memories!")
+
+
+# ========== Medication reminder Section ==========
+with st.expander("💊 Medication Reminder System", expanded=False):
+    st.markdown("#### Set a Medication Reminder")
+
+    medication = st.text_input("Medication Name")
+
+    hour = st.selectbox("Hour", options=[f"{i:02d}" for i in range(1, 13)])
+    minute = st.selectbox("Minute", options=[f"{i:02d}" for i in range(0, 60)])
+    period = st.selectbox("AM/PM", options=["AM", "PM"])
+
+    phone_number = st.text_input("Phone Number", max_chars=15)
+
+    if st.button("Set Reminder"):
+        if medication and phone_number:
+            formatted_time = f"{hour}:{minute} {period}"
+            existing_entry = collection.find_one(
+                {"table_name": "medications", "phone_number": phone_number}
+            )
+            if existing_entry:
+                if medication in existing_entry["medications"]:
+                    existing_entry["medications"][medication].append(formatted_time)
+                else:
+                    existing_entry["medications"][medication] = [formatted_time]
+                collection.update_one(
+                    {"_id": existing_entry["_id"]},
+                    {"$set": {"medications": existing_entry["medications"]}},
+                )
+            else:
+                collection.insert_one(
+                    {
+                        "table_name": "medications",
+                        "phone_number": phone_number,
+                        "medications": {medication: [formatted_time]},
+                    }
+                )
+            st.success("Reminder set successfully!")
+        else:
+            st.error("Please fill all fields.")

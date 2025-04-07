@@ -54,7 +54,6 @@ qa_chain = RetrievalQA.from_chain_type(
     return_source_documents=False
 )
 
-# ========================= 🌟 STYLING 🌟 =========================
 st.markdown("""
     <style>
     body {

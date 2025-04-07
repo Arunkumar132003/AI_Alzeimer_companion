@@ -6,8 +6,6 @@ mongodb_uri = os.getenv("MONGODB_URI")
 mongodb_database = os.getenv("MONGODB_DATABASE")
 collection_name = "companion"
 
-st.set_page_config(page_title="Sign In", page_icon="🔐", layout="centered")
-
 st.markdown("""
     <style>
     body {

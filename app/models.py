@@ -14,7 +14,7 @@ class MemoryRecallQuestionandAnswer(BaseModel):
 def load_model():
     llm= ChatGoogleGenerativeAI(
       model= 'gemini-1.5-flash',
-      api_key= os.getenv("GEMINI_API_KEY"),
+      api_key= os.getenv("GEMINI_API_KEY")
     )
     return llm 
 
