@@ -9,16 +9,18 @@ import base64
 from twilio.rest import Client
 from dotenv import load_dotenv
 from datetime import datetime
+import tempfile
 load_dotenv()
 import schedule
 import time
-import threading
 import streamlit as st
 import imaplib
 import email
 from email.header import decode_header
+from deepface import DeepFace
+import base64
 
-
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
@@ -220,6 +222,57 @@ def fetch_primary_emails(username, app_password, num_messages=5):
     except Exception as ex:
         st.error(f"An error occurred: {ex}")
     return emails
+
+
+def save_base64_image(b64_str, name):
+    if os.path.isfile(b64_str):
+        return b64_str  
+    try:
+        img_bytes = base64.b64decode(b64_str)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg", prefix=name + "_") as tmp_file:
+            tmp_file.write(img_bytes)
+            return tmp_file.name
+    except Exception as e:
+        print(f"Error decoding image for {name}: {e}")
+        return None
+    
+def get_people_from_db():
+    document = collection.find_one({"table_name": "people"})
+    if not document:
+        return {}
+
+    people = document.get("people", {})
+    name_to_path = {}
+
+    for name, details in people.items():
+        img_data = details.get("image")
+        if img_data:
+            temp_img_path = save_base64_image(img_data, name)
+            name_to_path[name] = temp_img_path
+
+    return name_to_path
+
+def save_temp_image(image_bytes_or_path):
+    if isinstance(image_bytes_or_path, str) and os.path.exists(image_bytes_or_path):
+        return image_bytes_or_path
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+        tmp.write(image_bytes_or_path)
+        return tmp.name
+    
+def find_matching_name(test_image_path, name_to_image_map):
+    for name, known_img_path in name_to_image_map.items():
+        try:
+            result = DeepFace.verify(
+                img1_path=test_image_path,
+                img2_path=known_img_path,
+                model_name='Facenet',
+                enforce_detection=False
+            )
+            if result["verified"]:
+                return name
+        except Exception as e:
+            print(f"Error comparing with {name}: {e}")
+    return "No match found"
 
 def sanitize_identifier(identifier):
     return re.sub(r'[^a-zA-Z0-9_-]', '_', identifier)

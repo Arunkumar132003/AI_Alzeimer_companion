@@ -5,3 +5,7 @@ python-dotenv
 pymongo
 faiss-cpu
 langchain_community
+twilio
+schedule
+deepface
+opencv-python
