@@ -95,41 +95,83 @@ def get_random_memory():
     return (None, None)
 
 
-@st.cache_data(ttl=3600) 
+@st.cache_data(ttl=3600)
 def load_all_text_data():
-    user_data = collection.find_one({"table_name": "users"}, {"_id": 0, "users": 1})
     people_data = collection.find_one({"table_name": "people"}, {"_id": 0, "people": 1})
     events_data = collection.find_one({"table_name": "events"}, {"_id": 0, "events": 1})
     memories_data = collection.find_one({"table_name": "memories"}, {"_id": 0, "memories": 1})
-    
+    user_data = collection.find_one({"table_name": "about_user"}, {"_id": 0, "about_user": 1})
+
     documents = []
 
-    if user_data and user_data.get("users"):
-        for username, data in user_data["users"].items():
-            context = f"USER DETAILS:\nFull Name: {data.get('Full Name', 'N/A')}\nDate of Birth: {data.get('Date of Birth', 'N/A')}\nGender: {data.get('Gender', 'N/A')}\nEmail: {data.get('Email', 'N/A')}\nPhone: {data.get('Phone', 'N/A')}\nAddress: {data.get('Address', 'N/A')}\nDiagnosis Date: {data.get('Diagnosis Date', 'N/A')}\nMedications: {data.get('Medications', 'N/A')}\nMedical History: {data.get('Medical History', 'N/A')}\nKnown Allergies: {data.get('Known Allergies', 'N/A')}\nCognitive Assessment: {data.get('Cognitive Assessment', 'N/A')}\nEmergency Contact: {data.get('Emergency Contact', 'N/A')} ({data.get('Emergency Contact Phone', 'N/A')})\nPreferred Language: {data.get('Preferred Language', 'N/A')}\nHobbies: {data.get('Hobbies', 'N/A')}"
-            
-            documents.append(context)
+    if user_data and user_data.get("about_user"):
+        user = user_data["about_user"]
+        email_retrieval = user.get("Email Retrieval", {})
+        context = f"""ABOUT THE USER:
+Full Name: {user.get("Full Name", "N/A")}
+Date of Birth: {user.get("Date of Birth", "N/A")}
+Gender: {user.get("Gender", "N/A")}
+Email: {user.get("Email", "N/A")}
+Phone: {user.get("Phone", "N/A")}
+Address: {user.get("Address", "N/A")}
+Username: {user.get("Username", "N/A")}
+Password: {user.get("Password", "N/A")}
+Diagnosis Date: {user.get("Diagnosis Date", "N/A")}
+Medications: {user.get("Medications", "N/A")}
+Medical History: {user.get("Medical History", "N/A")}
+Known Allergies: {user.get("Known Allergies", "N/A")}
+Cognitive Assessment: {user.get("Cognitive Assessment", "N/A")}
+Emergency Contact: {user.get("Emergency Contact", "N/A")}
+Emergency Contact Phone: {user.get("Emergency Contact Phone", "N/A")}
+Preferred Language: {user.get("Preferred Language", "N/A")}
+Hobbies: {user.get("Hobbies", "N/A")}
+Consent Given: {user.get("Consent Given", False)}
+Registration Time: {user.get("Registration Time", "N/A")}
+
+EMAIL RETRIEVAL:
+Gmail Address: {email_retrieval.get("Gmail Address", "N/A")}
+App Password: {email_retrieval.get("App Password", "N/A")}
+Emails to Retrieve: {email_retrieval.get("Emails to Retrieve", "N/A")}
+"""
+        documents.append(context)
 
     if people_data and people_data.get("people"):
-        for name, data in people_data["people"].items():
-            context = f"PERSON: {name}\nRelation: {data.get('relation', 'N/A')}\nAge: {data.get('age', 'N/A')}\nGender: {data.get('gender', 'N/A')}\nDescription: {data.get('description', 'N/A')}"
+        for idx, (name, data) in enumerate(people_data["people"].items(), start=1):
+            context = f"""USER KNOWS PERSON {idx} - {name}:
+Relation: {data.get('relation', 'N/A')}
+Age: {data.get('age', 'N/A')}
+Gender: {data.get('gender', 'N/A')}
+Mobile Number: {data.get('mobile_number', 'N/A')}
+Home Town: {data.get('home_town', 'N/A')}
+Description: {data.get('description', 'N/A')}
+Skin Tone: {data.get('appearance', {}).get('skin_tone', 'N/A')}
+Hair Style: {data.get('appearance', {}).get('hair_style', 'N/A')}
+Hair Color: {data.get('appearance', {}).get('hair_color', 'N/A')}
+Glasses: {data.get('appearance', {}).get('glasses', 'N/A')}
+Moles or Marks: {data.get('appearance', {}).get('moles_or_marks', 'N/A')}
+Beard: {data.get('appearance', {}).get('beard', 'N/A')}
+Mustache: {data.get('appearance', {}).get('mustache', 'N/A')}
+"""
             if "conversations" in data:
                 for date, conv in data["conversations"].items():
-                    if date:  
+                    if date:
                         context += f"\nConversation on {date}: {conv.get('conversation', 'N/A')}"
-            
             documents.append(context)
 
     if events_data and events_data.get("events"):
-        for title, data in events_data["events"].items():
-            context = f"UPCOMING EVENT: {title}\nDate: {data.get('date', 'N/A')}\nDescription: {data.get('description', 'N/A')}"
+        for idx, (title, data) in enumerate(events_data["events"].items(), start=1):
+            context = f"""UPCOMING EVENT {idx} - {title}:
+Date: {data.get('date', 'N/A')}
+Description: {data.get('description', 'N/A')}"""
             documents.append(context)
 
     if memories_data and memories_data.get("memories"):
-        for title, data in memories_data["memories"].items():
-            context = f"PAST MEMORY: {title}\nDate: {data.get('date', 'N/A')}\nDescription: {data.get('description', 'N/A')}"
+        for idx, (title, data) in enumerate(memories_data["memories"].items(), start=1):
+            context = f"""PAST MEMORY {idx} - {title}:
+Date: {data.get('date', 'N/A')}
+Description: {data.get('description', 'N/A')}"""
             documents.append(context)
-
+    print("Documents:", documents)
     return documents
 
 def send_sms(phone_number, message):
@@ -223,35 +265,6 @@ def fetch_primary_emails(username, app_password, num_messages=5):
         st.error(f"An error occurred: {ex}")
     return emails
 
-
-def save_base64_image(b64_str, name):
-    if os.path.isfile(b64_str):
-        return b64_str  
-    try:
-        img_bytes = base64.b64decode(b64_str)
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg", prefix=name + "_") as tmp_file:
-            tmp_file.write(img_bytes)
-            return tmp_file.name
-    except Exception as e:
-        print(f"Error decoding image for {name}: {e}")
-        return None
-    
-def get_people_from_db():
-    document = collection.find_one({"table_name": "people"})
-    if not document:
-        return {}
-
-    people = document.get("people", {})
-    name_to_path = {}
-
-    for name, details in people.items():
-        img_data = details.get("image")
-        if img_data:
-            temp_img_path = save_base64_image(img_data, name)
-            name_to_path[name] = temp_img_path
-
-    return name_to_path
-
 def save_temp_image(image_bytes_or_path):
     if isinstance(image_bytes_or_path, str) and os.path.exists(image_bytes_or_path):
         return image_bytes_or_path
@@ -259,20 +272,16 @@ def save_temp_image(image_bytes_or_path):
         tmp.write(image_bytes_or_path)
         return tmp.name
     
-def find_matching_name(test_image_path, name_to_image_map):
-    for name, known_img_path in name_to_image_map.items():
-        try:
-            result = DeepFace.verify(
-                img1_path=test_image_path,
-                img2_path=known_img_path,
-                model_name='Facenet',
-                enforce_detection=False
-            )
-            if result["verified"]:
-                return name
-        except Exception as e:
-            print(f"Error comparing with {name}: {e}")
-    return "No match found"
+def get_user_details(username):
+    document = collection.find_one({
+    "table_name": "about_user",
+    "about_user.Username": username
+    })
 
-def sanitize_identifier(identifier):
-    return re.sub(r'[^a-zA-Z0-9_-]', '_', identifier)
+    if document:
+        return document["about_user"]
+    else:
+        return None
+    
+def encode_image_from_bytes(image_bytes):
+    return base64.b64encode(image_bytes).decode("utf-8")

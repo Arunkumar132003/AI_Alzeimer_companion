@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime
 from pymongo import MongoClient
 import os
+import base64
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -109,34 +110,34 @@ with st.form("patient_form", clear_on_submit=True):
             st.error("Please agree to the terms and privacy policy to register.")
         else:
             user_data = {
-                "Full Name": full_name,
-                "Date of Birth": str(date_of_birth),
-                "Gender": gender,
-                "Photo Filename": photo.name if photo else None,
-                "Email": email,
-                "Phone": phone,
-                "Address": address,
-                "Username": username,
-                "Password": password,
-                "Email Retrieval": {
-                    "Gmail Address": user_email,
-                    "App Password": user_password,
-                    "Emails to Retrieve": num_emails
-                },
-                "Diagnosis Date": str(diagnosis_date),
-                "Medications": medications,
-                "Medical History": medical_history,
-                "Known Allergies": known_allergies,
-                "Cognitive Assessment": cognitive_assessment,
-                "Emergency Contact": emergency_contact,
-                "Emergency Contact Phone": emergency_phone,
-                "Preferred Language": preferred_language,
-                "Hobbies": hobbies,
-                "Consent Given": consent,
-                "Registration Time": datetime.now().isoformat()
+                "table_name": "about_user",
+                "about_user": {
+                    "Full Name": full_name,
+                    "Date of Birth": str(date_of_birth),
+                    "Gender": gender,
+                    "image": base64.b64encode(photo.read()).decode("utf-8") if photo else None,
+                    "Email": email,
+                    "Phone": phone,
+                    "Address": address,
+                    "Username": username,
+                    "Password": password,
+                    "Email Retrieval": {
+                        "Gmail Address": user_email,
+                        "App Password": user_password,
+                        "Emails to Retrieve": num_emails
+                    },
+                    "Diagnosis Date": str(diagnosis_date),
+                    "Medications": medications,
+                    "Medical History": medical_history,
+                    "Known Allergies": known_allergies,
+                    "Cognitive Assessment": cognitive_assessment,
+                    "Emergency Contact": emergency_contact,
+                    "Emergency Contact Phone": emergency_phone,
+                    "Preferred Language": preferred_language,
+                    "Hobbies": hobbies,
+                    "Consent Given": consent,
+                    "Registration Time": datetime.now().isoformat()
+                }
             }
-
             collection.insert_one(user_data)
             st.success("Registration successful! Redirecting to sign-in...")
-            st.query_params(page="signin")
-            st.experimental_rerun()
