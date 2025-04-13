@@ -25,7 +25,7 @@ TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 mongodb_uri = os.getenv("MONGODB_URI")
-mongodb_database = os.getenv("MONGODB_DATABASE")
+mongodb_database = 'alziemer'
 collection_name = "companion"
 client = pymongo.MongoClient(mongodb_uri)
 db = client[mongodb_database]
@@ -44,6 +44,7 @@ def encode_uploaded_image(image):
 def get_upcoming_events():
     today = datetime.today().date()
     events_data = collection.find_one({"table_name": "events"})
+    #print('events',events_data)
     if events_data and "events" in events_data:
         events = events_data["events"]
         valid_events = {
@@ -57,6 +58,7 @@ def get_upcoming_events():
             (event[0], datetime.strptime(event[1]["date"], "%Y-%m-%d").strftime("%d %B %Y"))
             for event in sorted_events if datetime.strptime(event[1]["date"], "%Y-%m-%d").date() >= today
         ]
+        #print(upcoming_events,'ppor')
         return upcoming_events[:3]  
     return []
 
@@ -171,7 +173,7 @@ Description: {data.get('description', 'N/A')}"""
 Date: {data.get('date', 'N/A')}
 Description: {data.get('description', 'N/A')}"""
             documents.append(context)
-    print("Documents:", documents)
+    #print("Documents:", documents)
     return documents
 
 def send_sms(phone_number, message):
@@ -277,7 +279,7 @@ def get_user_details(username):
     "table_name": "about_user",
     "about_user.Username": username
     })
-
+    #print(document,'yyyyyyyyy')
     if document:
         return document["about_user"]
     else:

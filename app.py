@@ -36,12 +36,12 @@ os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY")
 
 st.set_page_config(page_title="AI Alzheimer Companion", page_icon="🧠", layout="wide")
 mongodb_uri = os.getenv("MONGODB_URI")
-mongodb_database = os.getenv("MONGODB_DATABASE")
+mongodb_database = 'alziemer'
 collection_name = "companion"
 client = pymongo.MongoClient(mongodb_uri)
 db = client[mongodb_database]
-collection = db[collection_name]
 
+collection = db[collection_name]
 schedule.every().minute.do(check_reminders)
 threading.Thread(target=schedule_checker, daemon=True).start()
 
@@ -91,6 +91,7 @@ def signin():
         submitted = st.form_submit_button("Sign In")
         
         if submitted:
+            
             user_document = collection.find_one({
                 "table_name": "about_user",
                 "about_user.Username": username
@@ -110,6 +111,7 @@ def signin():
 
 def main():
     name = st.session_state.username
+    #print(name,'oooo')
     about_user = get_user_details(name)
 
     profile_image_base64 = ""
@@ -118,7 +120,7 @@ def main():
     if photo_bytes:
         if isinstance(photo_bytes, str):
             profile_image_base64 = photo_bytes
-            print(profile_image_base64[:30]) 
+            # #print(profile_image_base64[:30]) 
         else:
             profile_image_base64 = encode_image_from_bytes(photo_bytes)
     email = about_user.get("Email Retrieval", {})
@@ -186,152 +188,6 @@ def main():
     )
 
     upcoming_events = get_upcoming_events()
-
-    # ========== Add Person Section ==========
-    with st.sidebar.expander("Add Person", expanded=False):
-        uploaded_file = st.file_uploader(
-            "Upload a person's image", type=["jpg", "png", "jpeg"]
-        )
-        name = st.text_input("Name")
-        age = st.number_input("Age", min_value=0, max_value=120, step=1)
-        gender = st.selectbox("Gender", ["Male", "Female"])
-        relation = st.selectbox(
-            "Relation", ["Father", "Mother", "Sister", "Brother", "Friend", "Other"]
-        )
-        description = st.text_area("Description")
-        mobile_number = st.text_input("Mobile Number")
-        home_town= st.text_input("Home Town")
-        skin_tone = st.selectbox("Skin Tone", ["Not Sure","Light", "Medium", "Dark"])
-        hair_style = st.selectbox("Hair Style", ["Not Sure","Straight", "Wavy", "Curly", "Bald"])
-        hair_color = st.selectbox("Hair Color", [ "Not Sure","Black", "Brown", "Blonde", "Grey", "Dyed", "Other"])
-        glasses = st.selectbox("Wears Glasses?", ["Not Sure", "Yes", "No"])
-        moles_or_marks = st.text_input("Moles or Distinct Marks (if any)")
-        beard = st.selectbox("Beard", ["Not Sure","Yes", "No"])
-        mustache = st.selectbox("Mustache", ["Not Sure","Yes", "No"])
-
-        if st.button("Add Person"):
-            if uploaded_file and name and relation and description:
-                image_data = encode_uploaded_image(uploaded_file)
-                person_entry = {
-                    "age": age,
-                    "gender": gender,
-                    "image": image_data,
-                    "relation": relation,
-                    "mobile_number": mobile_number,
-                    "home_town": home_town,
-                    "description": description,
-                    "conversations": {},
-                    "appearance": {
-                        "skin_tone": skin_tone,
-                        "hair_style": hair_style,
-                        "hair_color": hair_color,
-                        "glasses": glasses,
-                        "moles_or_marks": moles_or_marks,
-                        "beard": beard,
-                        "mustache": mustache
-                    }
-                }
-
-                existing_people = collection.find_one({"table_name": "people"})
-
-                if existing_people:
-                    collection.update_one(
-                        {"table_name": "people"}, {"$set": {f"people.{name}": person_entry}}
-                    )
-                else:
-                    collection.insert_one(
-                        {"table_name": "people", "people": {name: person_entry}}
-                    )
-
-                st.success(
-                    "Added to your memory successfully! Every moment matters and is now part of your cherished memories 🧠."
-                )
-            else:
-                st.error("Please fill in all details and upload an image.")
-
-    with st.sidebar.expander("Add Conversation", expanded=False):
-        existing_person = get_people_name()
-        person_name = st.selectbox("Name", existing_person)
-        conversation_date = st.date_input("Conversation Date", date.today())
-        conversation_text = st.text_area("Conversation")
-
-        if st.button("Add Conversation"):
-            if person_name and conversation_text:
-                conversation_entry = {"conversation": conversation_text}
-                date_str = conversation_date.strftime("%Y-%m-%d")
-                update_result = collection.update_one(
-                    {"table_name": "people", f"people.{person_name}": {"$exists": True}},
-                    {
-                        "$set": {
-                            f"people.{person_name}.conversations.{date_str}": conversation_entry
-                        }
-                    },
-                )
-                if update_result.modified_count > 0:
-                    st.success(f"Conversation added for {person_name} on {date_str}.")
-                else:
-                    st.error(f"Person named {person_name} not found.")
-            else:
-                st.error("Please provide the person's name and the conversation text.")
-
-
-    # ========== Add Memory Section ==========
-    with st.sidebar.expander("Add Memory", expanded=False):
-        memory_title = st.text_input("Memory Title")
-        add_date = st.checkbox("Include memory date?")
-        memory_date = st.date_input("Memory Date") if add_date else None
-        memory_description = st.text_area("Memory Description")
-
-        if st.button("Add Memory"):
-            if memory_title and memory_description:
-                memory_entry = {"description": memory_description}
-
-                if add_date and memory_date:
-                    memory_entry["date"] = str(memory_date)
-
-                existing_memories = collection.find_one({"table_name": "memories"})
-
-                if existing_memories:
-                    collection.update_one(
-                        {"table_name": "memories"},
-                        {"$set": {f"memories.{memory_title}": memory_entry}},
-                    )
-                else:
-                    collection.insert_one(
-                        {"table_name": "memories", "memories": {memory_title: memory_entry}}
-                    )
-
-                st.success(f"Memory '{memory_title}' added successfully! 💙")
-            else:
-                st.error("Please fill in all details to add a memory.")
-
-
-    # ========== Add Event Section ==========
-    with st.sidebar.expander("Add Upcoming Event", expanded=False):
-        event_title = st.text_input("Event Title")
-        event_date = st.date_input("Event Date")
-        event_description = st.text_area("Event Description")
-
-        if st.button("Add Event"):
-            if event_title and event_date and event_description:
-                event_entry = {"description": event_description, "date": str(event_date)}
-
-                existing_events = collection.find_one({"table_name": "events"})
-
-                if existing_events:
-                    collection.update_one(
-                        {"table_name": "events"},
-                        {"$set": {f"events.{event_title}": event_entry}},
-                    )
-                else:
-                    collection.insert_one(
-                        {"table_name": "events", "events": {event_title: event_entry}}
-                    )
-
-                st.success(f"Event '{event_title}' added successfully! 📅")
-            else:
-                st.error("Please fill in all details to add an event.")
-
     # ==========  Header Section  ==========
     marquee_messages = [
         f"Hello {st.session_state.username}! Hope you're having a wonderful day! 😊",
