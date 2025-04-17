@@ -12,6 +12,7 @@ load_dotenv()
 os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY")
 
 documents = load_all_text_data()
+print("RAG Data->", documents)
 embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 vectorstore = FAISS.from_texts(texts=documents, embedding=embeddings)
 retriever = vectorstore.as_retriever(search_kwargs={"k": 10})

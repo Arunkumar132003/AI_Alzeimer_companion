@@ -144,6 +144,7 @@ Relation: {data.get('relation', 'N/A')}
 Age: {data.get('age', 'N/A')}
 Gender: {data.get('gender', 'N/A')}
 Mobile Number: {data.get('mobile_number', 'N/A')}
+Date of first meet: {data.get('first_met',"")}
 Home Town: {data.get('home_town', 'N/A')}
 Description: {data.get('description', 'N/A')}
 Skin Tone: {data.get('appearance', {}).get('skin_tone', 'N/A')}
@@ -153,11 +154,8 @@ Glasses: {data.get('appearance', {}).get('glasses', 'N/A')}
 Moles or Marks: {data.get('appearance', {}).get('moles_or_marks', 'N/A')}
 Beard: {data.get('appearance', {}).get('beard', 'N/A')}
 Mustache: {data.get('appearance', {}).get('mustache', 'N/A')}
+Conversation: {data.get("conversations", {})}
 """
-            if "conversations" in data:
-                for date, conv in data["conversations"].items():
-                    if date:
-                        context += f"\nConversation on {date}: {conv.get('conversation', 'N/A')}"
             documents.append(context)
 
     if events_data and events_data.get("events"):

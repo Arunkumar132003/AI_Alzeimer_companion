@@ -33,6 +33,7 @@ gender = st.selectbox("Gender", ["Male", "Female"])
 relation = st.selectbox("Relation", ["Father", "Mother", "Sister", "Brother", "Friend", "Other"])
 description = st.text_area("Description")
 mobile_number = st.text_input("Mobile Number")
+first_met=st.date_input('date_of_meet')
 home_town = st.text_input("Home Town")
 skin_tone = st.selectbox("Skin Tone", ["Not Sure", "Light", "Medium", "Dark"])
 hair_style = st.selectbox("Hair Style", ["Not Sure", "Straight", "Wavy", "Curly", "Bald"])
@@ -53,6 +54,7 @@ if st.button("Add Person"):
             "age": age,
             "gender": gender,
             "image": image_data,
+            "date_of_first_meet_":str(first_met),
             "relation": relation,
             "mobile_number": mobile_number,
             "home_town": home_town,
@@ -70,16 +72,15 @@ if st.button("Add Person"):
         }
 
         existing_people = collection.find_one({"table_name": "people"})
-        #print(existing_people,'999999999999999')
         if existing_people:
-            (collection.update_one(
+            collection.update_one(
                 {"table_name": "people"}, {"$set": {f"people.{name}": person_entry}}
-            ),'pppppppppppp')
+            )
             
         else:
-            (collection.insert_one(
+            collection.insert_one(
                 {"table_name": "people", "people": {name: person_entry}}
-            ),'00000000000000000000000000000000')
+            )
 
         st.success(
             "Added to your memory successfully! Every moment matters and is now part of your cherished memories 🧠."

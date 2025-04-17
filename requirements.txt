@@ -3,7 +3,6 @@ twilio
 python-dotenv
 schedule
 streamlit
-imaplib
 email
 deepface
 langchain-google-genai
@@ -15,3 +14,5 @@ opencv-python
 pillow
 numpy
 tf-keras
+assemblyai
+audio-recorder-streamlit

@@ -214,6 +214,7 @@ elif search_mode == "🔠 By Name/Entity":
                 st.write(f"**Gender:** {person.get('gender', 'N/A')}")
                 st.write(f"**Relation:** {person.get('relation', 'N/A')}")
                 st.write(f"**Description:** {person.get('description', 'N/A')}")
+                st.write(f"**conversation:** {person.get('conversations', 'N/A')}")
         else:
             st.info(f"🔎 {len(matches)} matches found:")
             for person in matches:
@@ -223,6 +224,7 @@ elif search_mode == "🔠 By Name/Entity":
                     st.write(f"**Gender:** {person.get('gender', 'N/A')}")
                     st.write(f"**Relation:** {person.get('relation', 'N/A')}")
                     st.write(f"**Description:** {person.get('description', 'N/A')}")
+                    st.write(f"**conversation:** {person.get('conversations', 'N/A')}")
                     if 'image_path' in person and os.path.exists(person['image_path']):
                         st.image(person['image_path'], width=200)
                 st.markdown("---")
@@ -259,8 +261,11 @@ elif search_mode == "👤 By Appearance":
                 person=people_data[persons]
                 #print(person,'iiiiiiiiii')
                 st.markdown(f"✅ **{person['name']}**")
-                st.write(f"**Relation:** {person['relation']}")
+                st.write(f"**Age:** {person.get('age', 'N/A')}")
+                st.write(f"**Gender:** {person.get('gender', 'N/A')}")
+                st.write(f"**Relation:** {person.get('relation', 'N/A')}")
                 st.write(f"**Description:** {person.get('description', 'N/A')}")
+                st.write(f"**conversation:** {person.get('conversations', 'N/A')}")
                 st.markdown("---")
         else:
             st.warning("No match found by these traits.")

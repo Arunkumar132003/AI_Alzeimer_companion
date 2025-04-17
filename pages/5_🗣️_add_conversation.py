@@ -41,7 +41,7 @@ def get_people_from_db():
 
 people_data = get_people_from_db()
 existing_person = list(people_data.keys())
-person_name = st.selectbox("👤 Select a Person", existing_person)
+person_name = st.selectbox("👤 Select a Person who you are speaking with", existing_person)
 conversation_date = st.date_input("📅 Conversation Date", date.today())
 
 # Choose input method
@@ -85,12 +85,16 @@ if audio_bytes:
 
 # If transcription was done
 if st.session_state.speaker_options:
-    selected_speaker = st.radio("🗣️ Who were you in the conversation?", st.session_state.speaker_options,index=None)
+    selected_speaker = st.radio("🗣️ Who is the person conversation?", st.session_state.speaker_options,index=None)
 
     # Extract only the user's lines
     if selected_speaker:
         utt=[f"Speaker {utt.speaker}: {utt.text}" for utt in st.session_state.utterances]
         user_utterances=[i.replace(selected_speaker,person_name) for i in utt]
+        # iam=st.session_state.speaker_options.copy()
+        # iam.remove(selected_speaker)
+
+        # user_utterances=[i.replace(iam,person_name) for i in utt]
         full_user_text = "\n".join(user_utterances)
         st.session_state.conversation_text = full_user_text
     else:
